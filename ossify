@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+import os
+from typing import Optional, Union
+
+from spotipy.oauth2 import SpotifyOAuth 
+import spotipy
+
+
+env = os.environ.get
+
+USER          = env("OSSIFY_USER")
+CLIENT_ID     = env("OSSIFY_CLIENT_ID")
+CLIENT_SECRET = env("OSSIFY_CLIENT_SECRET")
+PORT          = env("OSSIFY_PORT", 8282)
+
+DW_ID = env("OSSIFY_DW_ID")
+RR_ID = env("OSSIFY_RR_ID")
+
+SCOPE = "user-library-read, playlist-read-private, playlist-modify-public, playlist-modify-private, playlist-modify"
+
+
+def retrieve_playlist(playlist_id: Optional[str]) -> dict[str, Union[tuple, str]]:
+    playlist = sp.playlist_items(
+        playlist_id,
+        fields="items.added_at,items.track.id"
+    ).get("items")
+    return {
+        "date": playlist[0]['added_at'].split("T")[0],
+        "tracks": tuple(map(lambda item: item['track']['id'], playlist))
+    }
+
+def mirror_playlist(name: str, data: dict[str, Union[tuple, str]]) -> dict[str, str]:
+    pl_name  = f"{data['date']} {name}"
+    playlist = sp.user_playlist_create(USER, pl_name, public=False)
+
+    return sp.playlist_add_items(playlist['id'], data['tracks'])
+
+
+if __name__ == "__main__":
+
+    # 1. authenticate
+    sp = spotipy.Spotify(
+        auth_manager=SpotifyOAuth(
+            client_id=CLIENT_ID,
+            client_secret=CLIENT_SECRET,
+            scope=SCOPE,
+            redirect_uri=f"http://localhost:{PORT}",
+        )
+    )
+
+    # 2. retrieve and mirror playlists' contents
+    dw_result = mirror_playlist(
+        "Discover Weekly",
+        data=retrieve_playlist(DW_ID),
+    )
+    rr_result = mirror_playlist(
+        "Release Radar",
+        data=retrieve_playlist(RR_ID),
+    )
+
